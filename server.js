@@ -35,12 +35,23 @@ const initializeDB = () => {
       )
     `);
 
-    // Insert sample data
-    const stmt = db.prepare('INSERT INTO expenses (amount, description, category, date) VALUES (?, ?, ?, ?)');
-    stmt.run(50.00, 'Lunch at cafe', 'Food', '2025-05-28');
-    stmt.run(120.00, 'Grocery shopping', 'Food', '2025-05-28');
-    stmt.run(25.00, 'Bus fare', 'Transportation', '2025-05-28');
-    stmt.finalize();
+    // Check if table is empty before inserting sample data
+    db.get('SELECT COUNT(*) as count FROM expenses', (err, row) => {
+      if (err) {
+        console.error('Error checking expenses count:', err);
+        return;
+      }
+
+      if (row.count === 0) {
+        // Only insert sample data if table is empty
+        const stmt = db.prepare('INSERT INTO expenses (amount, description, category, date) VALUES (?, ?, ?, ?)');
+        stmt.run(50.00, 'Lunch at cafe', 'Food', '2025-05-28');
+        stmt.run(120.00, 'Grocery shopping', 'Food', '2025-05-28');
+        stmt.run(25.00, 'Bus fare', 'Transportation', '2025-05-28');
+        stmt.finalize();
+        console.log('Inserted sample data');
+      }
+    });
   });
 };
 
