@@ -38,17 +38,28 @@ function App() {
   const [selectedCategory, setSelectedCategory] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [openDialog, setOpenDialog] = useState(false);
-  const [selectedExpense, setSelectedExpense] = useState(null);
   const [summaryData, setSummaryData] = useState([]);
+  const [newExpense, setNewExpense] = useState({
+    amount: '',
+    description: '',
+    category: '',
+    date: new Date().toISOString().split('T')[0]
+  });
 
   const fetchExpenses = async () => {
     try {
+      setLoading(true);
+      setError(null);
       const response = await fetch('http://localhost:3001/api/expenses');
+      if (!response.ok) {
+        throw new Error('Failed to load expenses');
+      }
       const data = await response.json();
       setExpenses(data);
-      setLoading(false);
     } catch (err) {
       setError(err.message);
+      console.error('Error fetching expenses:', err);
+    } finally {
       setLoading(false);
     }
   };
@@ -56,41 +67,49 @@ function App() {
   const fetchCategories = async () => {
     try {
       const response = await fetch('http://localhost:3001/api/categories');
+      if (!response.ok) {
+        throw new Error('Failed to load categories');
+      }
       const data = await response.json();
       setCategories(data);
     } catch (err) {
-      setError(err.message);
+      console.error('Error fetching categories:', err);
     }
   };
 
   const fetchSummary = async () => {
     try {
       const response = await fetch('http://localhost:3001/api/summary');
+      if (!response.ok) {
+        throw new Error('Failed to load summary');
+      }
       const data = await response.json();
       setSummaryData(data);
     } catch (err) {
-      setError(err.message);
+      console.error('Error fetching summary:', err);
     }
   };
 
   useEffect(() => {
-    fetchExpenses();
-    fetchCategories();
-    fetchSummary();
+    const loadData = async () => {
+      await Promise.all([
+        fetchExpenses(),
+        fetchCategories(),
+        fetchSummary()
+      ]);
+    };
+    loadData();
   }, []);
 
   const handleAddExpense = async (expense) => {
     try {
+      setError(null);
       const response = await fetch('http://localhost:3001/api/expenses', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          ...expense,
-          amount: parseFloat(expense.amount) || 0,
-          date: expense.date || new Date().toISOString().split('T')[0]
-        }),
+        body: JSON.stringify(expense),
       });
       
       if (!response.ok) {
@@ -101,7 +120,12 @@ function App() {
       await fetchExpenses();
       await fetchSummary();
       setOpenDialog(false);
-      setSelectedExpense(null);
+      setNewExpense({
+        amount: '',
+        description: '',
+        category: '',
+        date: new Date().toISOString().split('T')[0]
+      });
     } catch (err) {
       setError(err.message);
     }
@@ -190,7 +214,20 @@ function App() {
               <Typography variant="h6" gutterBottom>
                 Spending Summary
               </Typography>
-              <Line data={chartData} />
+              {summaryData.length > 0 ? (
+                <Line data={chartData} />
+              ) : (
+                <Box sx={{ 
+                  height: '100%', 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'center' 
+                }}>
+                  <Typography color="text.secondary">
+                    No expenses to display
+                  </Typography>
+                </Box>
+              )}
             </Paper>
           </Grid>
 
@@ -240,7 +277,12 @@ function App() {
                   color="primary"
                   startIcon={<AddIcon />}
                   onClick={() => {
-                    setSelectedExpense(null);
+                    setNewExpense({
+                      amount: '',
+                      description: '',
+                      category: '',
+                      date: new Date().toISOString().split('T')[0]
+                    });
                     setOpenDialog(true);
                   }}
                 >
@@ -249,9 +291,13 @@ function App() {
               </Box>
 
               {loading ? (
-                <CircularProgress />
+                <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                  <CircularProgress />
+                </Box>
               ) : error ? (
-                <Alert severity="error">{error}</Alert>
+                <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
+              ) : expenses.length === 0 ? (
+                <Alert severity="info">No expenses found. Add your first expense using the button above.</Alert>
               ) : (
                 <Box sx={{ width: '100%', overflow: 'auto' }}>
                   <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -298,9 +344,18 @@ function App() {
       </Container>
 
       {/* Add/Edit Expense Dialog */}
-      <Dialog open={openDialog} onClose={() => setOpenDialog(false)}>
+      <Dialog open={openDialog} onClose={() => {
+        setOpenDialog(false);
+        setError(null);
+        setNewExpense({
+          amount: '',
+          description: '',
+          category: '',
+          date: new Date().toISOString().split('T')[0]
+        });
+      }}>
         <DialogTitle>
-          {selectedExpense ? 'Edit Expense' : 'Add New Expense'}
+          Add New Expense
         </DialogTitle>
         <DialogContent>
           <Box sx={{ mt: 2 }}>
@@ -308,37 +363,31 @@ function App() {
               fullWidth
               label="Amount"
               type="number"
-              value={selectedExpense?.amount || ''}
-              onChange={(e) => {
-                setSelectedExpense({
-                  ...selectedExpense || {},
-                  amount: e.target.value
-                });
-              }}
+              value={newExpense.amount}
+              onChange={(e) => setNewExpense({
+                ...newExpense,
+                amount: e.target.value
+              })}
               sx={{ mb: 2 }}
             />
             <TextField
               fullWidth
               label="Description"
-              value={selectedExpense?.description || ''}
-              onChange={(e) => {
-                setSelectedExpense({
-                  ...selectedExpense || {},
-                  description: e.target.value
-                });
-              }}
+              value={newExpense.description}
+              onChange={(e) => setNewExpense({
+                ...newExpense,
+                description: e.target.value
+              })}
               sx={{ mb: 2 }}
             />
             <FormControl fullWidth sx={{ mb: 2 }}>
               <InputLabel>Category</InputLabel>
               <Select
-                value={selectedExpense?.category || ''}
-                onChange={(e) => {
-                  setSelectedExpense({
-                    ...selectedExpense || {},
-                    category: e.target.value
-                  });
-                }}
+                value={newExpense.category}
+                onChange={(e) => setNewExpense({
+                  ...newExpense,
+                  category: e.target.value
+                })}
                 label="Category"
               >
                 {categories.map(category => (
@@ -348,33 +397,40 @@ function App() {
                 ))}
               </Select>
             </FormControl>
+            <TextField
+              fullWidth
+              label="Date"
+              type="date"
+              value={newExpense.date}
+              onChange={(e) => setNewExpense({
+                ...newExpense,
+                date: e.target.value
+              })}
+              InputLabelProps={{
+                shrink: true,
+              }}
+            />
           </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => {
             setOpenDialog(false);
-            setSelectedExpense(null);
             setError(null);
+            setNewExpense({
+              amount: '',
+              description: '',
+              category: '',
+              date: new Date().toISOString().split('T')[0]
+            });
           }}>
             Cancel
           </Button>
           <Button
-            onClick={() => {
-              if (selectedExpense?.id) {
-                handleUpdateExpense(selectedExpense);
-              } else {
-                handleAddExpense({
-                  amount: selectedExpense?.amount || 0,
-                  description: selectedExpense?.description || '',
-                  category: selectedExpense?.category || '',
-                  date: new Date().toISOString().split('T')[0]
-                });
-              }
-            }}
+            onClick={() => handleAddExpense(newExpense)}
             color="primary"
-            disabled={!selectedExpense?.amount || !selectedExpense?.description || !selectedExpense?.category}
+            disabled={!newExpense.amount || !newExpense.description || !newExpense.category}
           >
-            {selectedExpense?.id ? 'Update' : 'Add'}
+            Add
           </Button>
         </DialogActions>
         {error && (
