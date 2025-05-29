@@ -86,12 +86,22 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(expense),
+        body: JSON.stringify({
+          ...expense,
+          amount: parseFloat(expense.amount) || 0,
+          date: expense.date || new Date().toISOString().split('T')[0]
+        }),
       });
-      if (response.ok) {
-        fetchExpenses();
-        setOpenDialog(false);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to add expense');
       }
+      
+      await fetchExpenses();
+      await fetchSummary();
+      setOpenDialog(false);
+      setSelectedExpense(null);
     } catch (err) {
       setError(err.message);
     }
@@ -300,9 +310,10 @@ function App() {
               type="number"
               value={selectedExpense?.amount || ''}
               onChange={(e) => {
-                if (selectedExpense) {
-                  setSelectedExpense({ ...selectedExpense, amount: parseFloat(e.target.value) });
-                }
+                setSelectedExpense({
+                  ...selectedExpense || {},
+                  amount: e.target.value
+                });
               }}
               sx={{ mb: 2 }}
             />
@@ -311,21 +322,24 @@ function App() {
               label="Description"
               value={selectedExpense?.description || ''}
               onChange={(e) => {
-                if (selectedExpense) {
-                  setSelectedExpense({ ...selectedExpense, description: e.target.value });
-                }
+                setSelectedExpense({
+                  ...selectedExpense || {},
+                  description: e.target.value
+                });
               }}
               sx={{ mb: 2 }}
             />
-            <FormControl fullWidth>
+            <FormControl fullWidth sx={{ mb: 2 }}>
               <InputLabel>Category</InputLabel>
               <Select
                 value={selectedExpense?.category || ''}
                 onChange={(e) => {
-                  if (selectedExpense) {
-                    setSelectedExpense({ ...selectedExpense, category: e.target.value });
-                  }
+                  setSelectedExpense({
+                    ...selectedExpense || {},
+                    category: e.target.value
+                  });
                 }}
+                label="Category"
               >
                 {categories.map(category => (
                   <MenuItem key={category} value={category}>
@@ -337,14 +351,20 @@ function App() {
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenDialog(false)}>Cancel</Button>
+          <Button onClick={() => {
+            setOpenDialog(false);
+            setSelectedExpense(null);
+            setError(null);
+          }}>
+            Cancel
+          </Button>
           <Button
             onClick={() => {
-              if (selectedExpense) {
+              if (selectedExpense?.id) {
                 handleUpdateExpense(selectedExpense);
               } else {
                 handleAddExpense({
-                  amount: parseFloat(selectedExpense?.amount || 0),
+                  amount: selectedExpense?.amount || 0,
                   description: selectedExpense?.description || '',
                   category: selectedExpense?.category || '',
                   date: new Date().toISOString().split('T')[0]
@@ -352,10 +372,16 @@ function App() {
               }
             }}
             color="primary"
+            disabled={!selectedExpense?.amount || !selectedExpense?.description || !selectedExpense?.category}
           >
-            {selectedExpense ? 'Update' : 'Add'}
+            {selectedExpense?.id ? 'Update' : 'Add'}
           </Button>
         </DialogActions>
+        {error && (
+          <DialogContent>
+            <Alert severity="error" sx={{ mt: 2 }}>{error}</Alert>
+          </DialogContent>
+        )}
       </Dialog>
     </Box>
   );
