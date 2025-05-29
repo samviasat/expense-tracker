@@ -39,6 +39,7 @@ function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [openDialog, setOpenDialog] = useState(false);
   const [summaryData, setSummaryData] = useState([]);
+  const [editingExpense, setEditingExpense] = useState(null);
   const [newExpense, setNewExpense] = useState({
     amount: '',
     description: '',
@@ -66,14 +67,16 @@ function App() {
 
   const fetchCategories = async () => {
     try {
+      setError(null);
       const response = await fetch('http://localhost:3001/api/categories');
       if (!response.ok) {
         throw new Error('Failed to load categories');
       }
       const data = await response.json();
-      setCategories(data);
+      setCategories(data || []);
     } catch (err) {
       console.error('Error fetching categories:', err);
+      setError('Failed to load categories. Please try again.');
     }
   };
 
@@ -92,11 +95,19 @@ function App() {
 
   useEffect(() => {
     const loadData = async () => {
-      await Promise.all([
-        fetchExpenses(),
-        fetchCategories(),
-        fetchSummary()
-      ]);
+      try {
+        setError(null);
+        setLoading(true);
+        await Promise.all([
+          fetchCategories(),
+          fetchExpenses(),
+          fetchSummary()
+        ]);
+      } catch (err) {
+        setError('Failed to load data. Please refresh the page.');
+      } finally {
+        setLoading(false);
+      }
     };
     loadData();
   }, []);
@@ -131,8 +142,21 @@ function App() {
     }
   };
 
+  const handleEditClick = (expense) => {
+    setEditingExpense(expense);
+    setNewExpense({
+      id: expense.id,
+      amount: expense.amount,
+      description: expense.description,
+      category: expense.category,
+      date: expense.date
+    });
+    setOpenDialog(true);
+  };
+
   const handleUpdateExpense = async (expense) => {
     try {
+      setError(null);
       const response = await fetch(`http://localhost:3001/api/expenses/${expense.id}`, {
         method: 'PUT',
         headers: {
@@ -140,10 +164,22 @@ function App() {
         },
         body: JSON.stringify(expense),
       });
-      if (response.ok) {
-        fetchExpenses();
-        setOpenDialog(false);
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to update expense');
       }
+      
+      await fetchExpenses();
+      await fetchSummary();
+      setOpenDialog(false);
+      setEditingExpense(null);
+      setNewExpense({
+        amount: '',
+        description: '',
+        category: '',
+        date: new Date().toISOString().split('T')[0]
+      });
     } catch (err) {
       setError(err.message);
     }
@@ -318,17 +354,10 @@ function App() {
                           <td>{expense.category}</td>
                           <td>${expense.amount.toFixed(2)}</td>
                           <td>
-                            <IconButton
-                              onClick={() => {
-                                setSelectedExpense(expense);
-                                setOpenDialog(true);
-                              }}
-                            >
+                            <IconButton onClick={() => handleEditClick(expense)}>
                               <EditIcon />
                             </IconButton>
-                            <IconButton
-                              onClick={() => handleDeleteExpense(expense.id)}
-                            >
+                            <IconButton onClick={() => handleDeleteExpense(expense.id)}>
                               <DeleteIcon />
                             </IconButton>
                           </td>
@@ -344,18 +373,22 @@ function App() {
       </Container>
 
       {/* Add/Edit Expense Dialog */}
-      <Dialog open={openDialog} onClose={() => {
-        setOpenDialog(false);
-        setError(null);
-        setNewExpense({
-          amount: '',
-          description: '',
-          category: '',
-          date: new Date().toISOString().split('T')[0]
-        });
-      }}>
+      <Dialog 
+        open={openDialog} 
+        onClose={() => {
+          setOpenDialog(false);
+          setError(null);
+          setEditingExpense(null);
+          setNewExpense({
+            amount: '',
+            description: '',
+            category: '',
+            date: new Date().toISOString().split('T')[0]
+          });
+        }}
+      >
         <DialogTitle>
-          Add New Expense
+          {editingExpense ? 'Edit Expense' : 'Add New Expense'}
         </DialogTitle>
         <DialogContent>
           <Box sx={{ mt: 2 }}>
@@ -416,6 +449,7 @@ function App() {
           <Button onClick={() => {
             setOpenDialog(false);
             setError(null);
+            setEditingExpense(null);
             setNewExpense({
               amount: '',
               description: '',
@@ -426,11 +460,17 @@ function App() {
             Cancel
           </Button>
           <Button
-            onClick={() => handleAddExpense(newExpense)}
+            onClick={() => {
+              if (editingExpense) {
+                handleUpdateExpense(newExpense);
+              } else {
+                handleAddExpense(newExpense);
+              }
+            }}
             color="primary"
             disabled={!newExpense.amount || !newExpense.description || !newExpense.category}
           >
-            Add
+            {editingExpense ? 'Update' : 'Add'}
           </Button>
         </DialogActions>
         {error && (
@@ -439,6 +479,7 @@ function App() {
           </DialogContent>
         )}
       </Dialog>
+      
     </Box>
   );
 }
