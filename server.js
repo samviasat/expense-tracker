@@ -24,6 +24,7 @@ const db = new sqlite3.Database('expenses.db', (err) => {
 // Initialize database
 const initializeDB = () => {
   db.serialize(() => {
+    // Create expenses table
     db.run(`
       CREATE TABLE IF NOT EXISTS expenses (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -35,19 +36,56 @@ const initializeDB = () => {
       )
     `);
 
-    // Check if table is empty before inserting sample data
-    db.get('SELECT COUNT(*) as count FROM expenses', (err, row) => {
+    // Create categories table
+    db.run(`
+      CREATE TABLE IF NOT EXISTS categories (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL UNIQUE
+      )
+    `);
+
+    // Initialize default categories if they don't exist
+    const defaultCategories = [
+      'Food',
+      'Transportation',
+      'Entertainment',
+      'Shopping',
+      'Bills',
+      'Other'
+    ];
+
+    // Check if categories table is empty
+    db.get('SELECT COUNT(*) as count FROM categories', (err, row) => {
       if (err) {
-        console.error('Error checking expenses count:', err);
+        console.error('Error checking categories:', err);
         return;
       }
 
       if (row.count === 0) {
+        // Insert default categories
+        const stmt = db.prepare('INSERT INTO categories (name) VALUES (?)');
+        defaultCategories.forEach(category => {
+          stmt.run(category);
+        });
+        stmt.finalize();
+        console.log('Inserted default categories');
+      }
+    });
+
+    // Check if expenses table is empty
+    db.get('SELECT COUNT(*) as count FROM expenses', (err, row) => {
+      if (err) {
+        console.error('Error checking expenses:', err);
+        return;
+      }
+
+      if (row.count === 0) {
+        const currentDate = new Date().toISOString().split('T')[0];
         // Only insert sample data if table is empty
         const stmt = db.prepare('INSERT INTO expenses (amount, description, category, date) VALUES (?, ?, ?, ?)');
-        stmt.run(50.00, 'Lunch at cafe', 'Food', '2025-05-28');
-        stmt.run(120.00, 'Grocery shopping', 'Food', '2025-05-28');
-        stmt.run(25.00, 'Bus fare', 'Transportation', '2025-05-28');
+        stmt.run(50.00, 'Lunch at cafe', 'Food', currentDate);
+        stmt.run(120.00, 'Grocery shopping', 'Food', currentDate);
+        stmt.run(25.00, 'Bus fare', 'Transportation', currentDate);
         stmt.finalize();
         console.log('Inserted sample data');
       }
@@ -165,16 +203,15 @@ app.get('/api/summary', (req, res) => {
   );
 });
 
+// Update categories endpoint to read from database
 app.get('/api/categories', (req, res) => {
-  const categories = [
-    'Food',
-    'Transportation',
-    'Entertainment',
-    'Shopping',
-    'Bills',
-    'Other'
-  ];
-  res.json(categories);
+  db.all('SELECT name FROM categories ORDER BY name', (err, rows) => {
+    if (err) {
+      res.status(500).json({ error: err.message });
+      return;
+    }
+    res.json(rows.map(row => row.name));
+  });
 });
 
 // Start server
