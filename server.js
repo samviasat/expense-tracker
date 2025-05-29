@@ -12,7 +12,14 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, 'client', 'build')));
 
 // Database connection
-const db = new sqlite3.Database(':memory:');
+const db = new sqlite3.Database('expenses.db', (err) => {
+  if (err) {
+    console.error('Error opening database:', err);
+  } else {
+    console.log('Connected to SQLite database');
+    initializeDB();
+  }
+});
 
 // Initialize database
 const initializeDB = () => {
@@ -36,8 +43,6 @@ const initializeDB = () => {
     stmt.finalize();
   });
 };
-
-initializeDB();
 
 // API Routes
 app.get('/api/expenses', (req, res) => {
